@@ -148,6 +148,8 @@ GameVisibleLine:
 
 .DrawSpriteP1
     TAY                         ; Y is only register that work with pointers
+    LDA #%00000101
+    STA NUSIZ1                  ; Stretch P1 sprite
     LDA (BomberSpritePtr),Y     ; Load P1 bitmap data from lookup table
     STA WSYNC
     STA GRP1
@@ -156,7 +158,7 @@ GameVisibleLine:
 
     DEX
     BNE .GameLineLoop           ; Loop all lines
-    
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
