@@ -20,6 +20,7 @@ JetSpritePtr    word            ; Pointer to player0 sprite in lookup table
 JetColorPtr     word            ; Pointer to player0 color in lookup table 
 BomberSpritePtr word            ; Pointer to player1 sprite in lookup table 
 BomberColorPtr  word            ; Pointer to player1 color in lookup table 
+JetAnimOffset   byte            ; Player0 sprite frame offset for animation
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start ROM code at $F000
@@ -35,7 +36,7 @@ Reset:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     LDA #10
     STA JetYPos
-    LDA #60
+    LDA #0
     STA JetXPos
     
     LDA #83
@@ -77,6 +78,19 @@ BOMBER_HEIGHT = 9               ; Player1 sprite hight
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 StartFrame:
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Calculations and tasks performed in the pre VBlank
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    LDA JetXPos
+    LDY #0
+    JSR SetObjectXPos           ; Set P0 horizontal position
+
+    LDA BomberXPos
+    LDY #1
+    JSR SetObjectXPos
+
+    STA WSYNC
+    STA HMOVE                   ; Apply the horizontal offsets previously set
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; VSYNC and VBLANK
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -131,6 +145,8 @@ GameVisibleLine:
     LDA #0                      ; else set lookup index to #0
 
 .DrawSpriteP0
+    CLC                         ; Clear carry flag before addition
+    ADC JetAnimOffset           ; Jump to the correct sprite frame address in memory
     TAY                         ; Y is only register that work with pointers
     LDA (JetSpritePtr),Y        ; Load P0 bitmap data from lookup table
     STA WSYNC
@@ -159,6 +175,9 @@ GameVisibleLine:
     DEX
     BNE .GameLineLoop           ; Loop all lines
 
+    LDA #0
+    STA JetAnimOffset           ; Reset jet animation to 0 frame
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Overscan
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -169,11 +188,76 @@ GameVisibleLine:
     REPEND
     LDA #0
     STA VBLANK
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Process input for P0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CheckP0Up:
+    LDA #%00010000              ; Player0 joystick up
+    BIT SWCHA               
+    BNE CheckP0Down             ; If bit pattern doesnt match, bypass Up block
+    INC JetYPos
+    LDA #0              
+    STA JetAnimOffset           ; Set animation offeset to the first frame
+
+CheckP0Down
+    LDA #%00100000
+    BIT SWCHA
+    BNE CheckP0Left
+    DEC JetYPos
+    LDA #0              
+    STA JetAnimOffset           ; Set animation offeset to the first frame
+
+CheckP0Left
+    LDA #%01000000
+    BIT SWCHA
+    BNE CheckP0Right
+    DEC JetXPos
+    LDA JET_HEIGHT              
+    STA JetAnimOffset           ; Set animation offeset to the second frame
+
+CheckP0Right
+    LDA #%10000000
+    BIT SWCHA
+    BNE EndInputCheck
+    INC JetXPos
+    LDA JET_HEIGHT              
+    STA JetAnimOffset           ; Set animation offeset to the second frame
+
+EndInputCheck
+    ; do nothing 
     
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Loop back
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     jmp StartFrame              ; Jump to start of rendering frame: rendering next frame
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Horizontal position subroutine
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; A is the target X coordinate position in pixels
+;; Y is the object type
+;;      0 : player0
+;;      1 : player1
+;;      2 : missle0
+;;      3 : missle1
+;;      4 : ball
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SetObjectXPos SUBROUTINE
+    STA WSYNC                   ; Start a new scanline
+    SEC                         
+.Div15Loop
+    SBC #15
+    BCS .Div15Loop              ; Loop until reac 15 px accuracy
+    EOR #7                      ; Handle offset range from -8 to 7
+    ASL
+    ASL
+    ASL
+    ASL                         ; For left shifts to get only top 4 bits
+    STA HMP0,Y                  ; Set fine offset
+    STA RESP0,Y                 ; Set position with 15 accuracy
+    RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Lookup tables
