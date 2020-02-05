@@ -15,12 +15,15 @@ JetXPos         byte            ; Player0 X position
 JetYPos         byte            ; Player0 Y position
 BomberXPos      byte            ; Player1 X position
 BomberYPos      byte            ; Player1 X position
+Random          byte            ; Random number generated to set enemy position
 
 JetSpritePtr    word            ; Pointer to player0 sprite in lookup table 
 JetColorPtr     word            ; Pointer to player0 color in lookup table 
 BomberSpritePtr word            ; Pointer to player1 sprite in lookup table 
 BomberColorPtr  word            ; Pointer to player1 color in lookup table 
 JetAnimOffset   byte            ; Player0 sprite frame offset for animation
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start ROM code at $F000
@@ -32,17 +35,20 @@ Reset:
     CLEAN_START                 ; Macro for reset memory and registers
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Start ROM code at $F000
+;; Initialize RAM variables and TIA registers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     LDA #10
     STA JetYPos
-    LDA #0
+    LDA #50
     STA JetXPos
     
     LDA #83
     STA BomberYPos
     LDA #54
     STA BomberXPos
+
+    LDA #%11010100
+    STA Random                  ; Set seed for random
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Initialize pointers to the correct adresses
@@ -200,7 +206,7 @@ CheckP0Up:
     LDA #0              
     STA JetAnimOffset           ; Set animation offeset to the first frame
 
-CheckP0Down
+CheckP0Down:
     LDA #%00100000
     BIT SWCHA
     BNE CheckP0Left
@@ -208,7 +214,7 @@ CheckP0Down
     LDA #0              
     STA JetAnimOffset           ; Set animation offeset to the first frame
 
-CheckP0Left
+CheckP0Left:
     LDA #%01000000
     BIT SWCHA
     BNE CheckP0Right
@@ -216,7 +222,7 @@ CheckP0Left
     LDA JET_HEIGHT              
     STA JetAnimOffset           ; Set animation offeset to the second frame
 
-CheckP0Right
+CheckP0Right:           
     LDA #%10000000
     BIT SWCHA
     BNE EndInputCheck
@@ -224,8 +230,22 @@ CheckP0Right
     LDA JET_HEIGHT              
     STA JetAnimOffset           ; Set animation offeset to the second frame
 
-EndInputCheck
-    ; do nothing 
+EndInputCheck:                  ; Do nothing 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Game logic update
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+UpdateBomberPosition:
+    LDA BomberYPos
+    CLC
+    CMP #0
+    BMI .ResetBomberPosition
+    DEC BomberYPos
+    JMP EndPositionUpdate
+.ResetBomberPosition
+    JSR SetRandomBomberPos      ; Call for next random X position
+
+EndPositionUpdate:              ; Do nothing
     
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Loop back
@@ -258,6 +278,39 @@ SetObjectXPos SUBROUTINE
     STA HMP0,Y                  ; Set fine offset
     STA RESP0,Y                 ; Set position with 15 accuracy
     RTS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Generate a Linear-Feedback Shift Register random number
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Generate LFSR random namber (0 - FF)
+;; Divide the rendom value by 4 to limit size of result to match river
+;; Add 30 to compensate offset
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SetRandomBomberPos  SUBROUTINE
+    LDA Random
+    ASL
+    EOR Random
+    ASL
+    EOR Random
+    ASL
+    ASL
+    EOR Random
+    ASL
+    ROL Random
+
+    lsr
+    lsr                         ; divide the value by 4 by performing 2 right shifts
+
+    STA BomberXPos
+    LDA #30
+    ADC BomberXPos              ; Adds 30 + BomberXPos
+    STA BomberXPos              
+
+    LDA #96
+    STA BomberYPos              ; Set Bomber at the top of the screen
+    RTS
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Lookup tables
