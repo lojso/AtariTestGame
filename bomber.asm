@@ -153,7 +153,7 @@ GameVisibleLine:
     LDA #%00000001
     STA CTRLPF                  ; Set playfield to reflecting mode
 
-    LDX #96                     ; Number of displaying lines
+    LDX #84                     ; Number of displaying lines
 .GameLineLoop:
 .AreWeInsideJetSprite:
     TXA                         ; Transfer X to A
@@ -259,7 +259,30 @@ UpdateBomberPosition:
     JSR SetRandomBomberPos      ; Call for next random X position
 
 EndPositionUpdate:              ; Do nothing
-    
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Check for object collision
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CheckCollisionP0AndP0:
+    LDA #%10000000              ; CXPPMM register bit 7 detect P0 and P1 collision
+    BIT CXPPMM
+    BNE .CollisionP0P1          ; Collision happened 
+    JMP CheckCollisionP0PF
+.CollisionP0P1:
+    JSR GameOver                ; Call GameOver subroutine
+
+CheckCollisionP0PF:
+    LDA #%10000000              ; CXP0FB register bit 7 detect P0 and Player Field collision
+    BIT CXP0FB                  
+    BNE .CollisionP0PF          ; Collision happened  
+    JMP EndCollisionCheck
+.CollisionP0PF:
+    JSR GameOver                ; Call GameOver subroutine
+
+
+EndCollisionCheck:              
+    STA CXCLR                   ; Clear all collision flags before next frame
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Loop back
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -290,6 +313,14 @@ SetObjectXPos SUBROUTINE
     ASL                         ; For left shifts to get only top 4 bits
     STA HMP0,Y                  ; Set fine offset
     STA RESP0,Y                 ; Set position with 15 accuracy
+    RTS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GameOver subroutine
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GameOver    SUBROUTINE
+    LDA #$30
+    STA COLUBK
     RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
