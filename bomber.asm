@@ -88,7 +88,7 @@ StartFrame:
 ;; Calculations and tasks performed in the pre VBlank
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     LDA JetXPos
-    LDY #0
+    LDY #0                      ; Y register using as argument for subroutine
     JSR SetObjectXPos           ; Set P0 horizontal position
 
     LDA BomberXPos
@@ -116,6 +116,19 @@ StartFrame:
         STA WSYNC
     REPEND
     STA VBLANK                  ; Zero already in A register becouse of VSYNC code block
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Display scoreboard
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    LDA #0                      ; Clear TIA registers before each new frame
+    STA PF0
+    STA PF1
+    STA PF2
+    STA GRP0
+    STA GRP1
+    STA COLUPF
+    REPEAT 20
+        STA WSYNC
+    REPEND
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Display 96 visible scanlines (because 2-line kernel)
