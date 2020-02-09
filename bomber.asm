@@ -314,8 +314,18 @@ UpdateBomberPosition:
     JMP EndPositionUpdate
 .ResetBomberPosition
     JSR SetRandomBomberPos      ; Call for next random X position
-    INC Score
-    INC Timer                   ; Incremet score and time after new enemy spawn
+    SED                         ; Enable decimal mode
+    LDA Score
+    CLC
+    ADC #1
+    STA Score                   ; Increment score on bomber spawn
+
+    LDA Timer
+    CLC
+    ADC #1
+    STA Timer                   ; Increment timer on bomber spawn
+
+    CLD                         ; Disable decimal mode
 
 EndPositionUpdate:              ; Do nothing
 
