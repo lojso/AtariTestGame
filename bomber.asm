@@ -15,15 +15,27 @@ JetXPos         byte            ; Player0 X position
 JetYPos         byte            ; Player0 Y position
 BomberXPos      byte            ; Player1 X position
 BomberYPos      byte            ; Player1 X position
+Score           byte            ; 2-digit score
+Timer           byte            ; 2-digit timer 
+Temp            byte            ; Temp variable
 Random          byte            ; Random number generated to set enemy position
+OneDigitOffset  word
+TensDigitOffset word
 
 JetSpritePtr    word            ; Pointer to player0 sprite in lookup table 
 JetColorPtr     word            ; Pointer to player0 color in lookup table 
 BomberSpritePtr word            ; Pointer to player1 sprite in lookup table 
 BomberColorPtr  word            ; Pointer to player1 color in lookup table 
 JetAnimOffset   byte            ; Player0 sprite frame offset for animation
+ScoreSprite     byte         ; store the sprite bit pattern for the score
+TimerSprite     byte         ; store the sprite bit pattern for the timer
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Define constants
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+JET_HEIGHT = 9                  ; Player0 sprite hight (num. of rows in lookup table)
+BOMBER_HEIGHT = 9               ; Player1 sprite hight 
+DIGITS_HEIGHT = 5
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start ROM code at $F000
@@ -50,6 +62,10 @@ Reset:
     LDA #%11010100
     STA Random                  ; Set seed for random
 
+    LDA #0
+    STA Score
+    STA Timer                   ; Timer = Score = 0
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Initialize pointers to the correct adresses
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -73,11 +89,6 @@ Reset:
     LDA #>BomberColor
     STA BomberColorPtr + 1        
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Define constants
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-JET_HEIGHT = 9                  ; Player0 sprite hight (num. of rows in lookup table)
-BOMBER_HEIGHT = 9               ; Player1 sprite hight 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Start the main display loop and frame rendering
@@ -94,6 +105,8 @@ StartFrame:
     LDA BomberXPos
     LDY #1
     JSR SetObjectXPos
+
+    JSR CalculateDigitOffset    ; Calculate the scoreboard digit lookup table offset
 
     STA WSYNC
     STA HMOVE                   ; Apply the horizontal offsets previously set
@@ -126,9 +139,53 @@ StartFrame:
     STA GRP0
     STA GRP1
     STA COLUPF
-    REPEAT 20
-        STA WSYNC
-    REPEND
+    LDA #$1C                    ; Set scoreboard color to white
+    STA COLUPF
+    LDA #%00000000              ; Disable playfield reflection
+    STA CTRLPF
+
+    LDX #DIGITS_HEIGHT          ; Start X Counter with 5
+
+.ScoreDigitLoop:
+    LDY TensDigitOffset         
+    LDA Digits,Y
+    AND #$F0                    ; Mask graphics for the ones digits
+    STA ScoreSprite
+    LDY OneDigitOffset
+    LDA Digits,Y
+    AND #$0F                    ; Mask graphics for the tens digits
+    ORA ScoreSprite             ; Merge ones with tens
+    STA ScoreSprite             ; Save it
+    STA WSYNC             
+
+    STA PF1
+
+    LDY TensDigitOffset+1       
+    LDA Digits,Y
+    AND #$F0                    ; Get only tens
+    STA TimerSprite
+    LDY OneDigitOffset+1
+    LDA Digits,Y
+    AND #$0F
+    ORA TimerSprite
+    STA TimerSprite
+
+    JSR Sleep12Cycles          
+
+    STA PF1
+    LDY ScoreSprite
+    STA WSYNC
+
+    STY PF1
+    INC TensDigitOffset
+    INC TensDigitOffset+1
+    INC OneDigitOffset
+    INC OneDigitOffset+1
+
+    STA WSYNC
+
+    DEX
+    BNE .ScoreDigitLoop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Display 96 visible scanlines (because 2-line kernel)
@@ -257,6 +314,8 @@ UpdateBomberPosition:
     JMP EndPositionUpdate
 .ResetBomberPosition
     JSR SetRandomBomberPos      ; Call for next random X position
+    INC Score
+    INC Timer                   ; Incremet score and time after new enemy spawn
 
 EndPositionUpdate:              ; Do nothing
 
@@ -300,7 +359,7 @@ EndCollisionCheck:
 ;;      3 : missle1
 ;;      4 : ball
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SetObjectXPos SUBROUTINE
+SetObjectXPos       SUBROUTINE
     STA WSYNC                   ; Start a new scanline
     SEC                         
 .Div15Loop
@@ -318,9 +377,13 @@ SetObjectXPos SUBROUTINE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; GameOver subroutine
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-GameOver    SUBROUTINE
+GameOver            SUBROUTINE
     LDA #$30
     STA COLUBK
+
+    LDA #0
+    STA Score
+    STA Timer                   ; Reset score and time on Game Over
     RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -355,6 +418,48 @@ SetRandomBomberPos  SUBROUTINE
     STA BomberYPos              ; Set Bomber at the top of the screen
     RTS
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Subroutine to handle scoreboard digits to be displayed on the screen
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CalculateDigitOffset    SUBROUTINE
+    LDX #1                      ; X register is the loop counter
+.PrepareScoreLoop
+
+    LDA Score,X                 ; Load A with Timer(X) or Score (X=0)
+    AND #$0F                    ; Set %00001111 mask on A register so it will remove 10th digits
+    STA Temp            
+    ASL 
+    ASL
+    ADC Temp        
+    STA OneDigitOffset,X
+
+    LDA Score,X           
+    AND #$F0
+    LSR
+    LSR    
+    STA Temp
+    LSR
+    LSR     
+    ADC Temp
+    STA TensDigitOffset,X
+
+    DEX
+    BPL .PrepareScoreLoop
+
+    RTS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Wastes 12 cycles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; JSR: 6 cycles
+;; RTS: 6 cycles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Sleep12Cycles           SUBROUTINE
+    RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Lookup tables
